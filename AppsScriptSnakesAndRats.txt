@@ -1,6 +1,6 @@
 // ============================================================
 // HIGH SOCIETY BINGO — Snakes, Ladders & Rats
-// Multi-team architecture with Discord/n8n integration
+// Multi-team architecture with Discord
 // ============================================================
 
 // --- Configuration ---
