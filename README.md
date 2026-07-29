@@ -3,7 +3,7 @@
 A live multiplayer board-game web portal for the **High Society** OSRS clan's *Snakes & Rats* competition. Teams roll dice, land on task tiles, submit proof, and race to tile 100 — all through a PWA-ready web app backed by Google Apps Script, Cloudflare Workers, and Discord.
 
 ## Recap
-A full gameplay recat can be seen here:  [Full Recap](https://hs-snakes-and-rats.netlify.app/) website.
+A full gameplay recap can be seen here:  [Full Recap](https://hs-snakes-and-rats.netlify.app/) website.
 
 ## Contributers:
 1. SoftPapi
