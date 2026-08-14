@@ -1,2 +1,12 @@
 # Source (unobfuscated) tile data — keep off the repo
 tile-images.source.json
+
+# Dependencies
+backend/node_modules/
+frontend/node_modules/
+
+# Build output
+frontend/dist/
+
+# Environment
+.env
