@@ -1,0 +1,14 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {"name": "APPS_SCRIPT_URL", "description": "Google Apps Script web app deployment URL (game backend)", "requiredAtBoot": false},
+    {"name": "WEB_SECRET", "description": "Shared secret matching WEB_APP_SECRET in the Apps Script project", "requiredAtBoot": false},
+    {"name": "ADMIN_CODE", "description": "Passphrase for Game Master access on the login screen", "requiredAtBoot": false},
+    {"name": "SPECTATOR_CODE", "description": "Passphrase for read-only spectator mode", "requiredAtBoot": false},
+    {"name": "IMGBB_KEY", "description": "Free API key from api.imgbb.com for proof image uploads", "requiredAtBoot": false},
+    {"name": "PROXY_URL", "description": "Cloudflare Worker URL that proxies commands to Apps Script + Discord (optional)", "requiredAtBoot": false}
+  ],
+  "verifiedAtCommit": "2aa802f23c"
+}
