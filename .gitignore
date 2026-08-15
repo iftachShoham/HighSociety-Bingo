@@ -10,3 +10,6 @@ frontend/dist/
 
 # Environment
 .env
+
+# Uploaded files
+backend/uploads/
