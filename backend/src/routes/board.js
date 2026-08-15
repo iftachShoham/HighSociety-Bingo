@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { authMiddleware } from "../middleware/auth.js";
+import { sendDiscordWebhook } from "../utils/discord.js";
 
 const router = Router();
 
@@ -18,12 +19,13 @@ router.get("/:gameId", async (req, res) => {
     }
 
     const tiles = await pool.query(
-      "SELECT id, position, task_description, required_submissions, metadata FROM tiles WHERE game_id = $1 ORDER BY position",
+      `SELECT id, position, task_description, required_submissions, metadata, image_url, is_rat_tile, allow_early_submit
+       FROM tiles WHERE game_id = $1 ORDER BY position`,
       [req.params.gameId]
     );
 
     const teams = await pool.query(
-      "SELECT id, name, color, position FROM teams WHERE game_id = $1 ORDER BY id",
+      "SELECT id, name, color, position, discord_webhook_url FROM teams WHERE game_id = $1 ORDER BY id",
       [req.params.gameId]
     );
 
@@ -115,6 +117,33 @@ router.post("/:gameId/move-team", authMiddleware, async (req, res) => {
     res.json({ team: result.rows[0] });
   } catch (err) {
     res.status(500).json({ error: "Failed to move team" });
+  }
+});
+
+// Admin: post a message to a team's Discord webhook
+router.post("/:gameId/post-discord", authMiddleware, async (req, res) => {
+  const { team_id, message, image_url } = req.body;
+  if (!team_id || !message) {
+    return res.status(400).json({ error: "team_id and message required" });
+  }
+  try {
+    const team = await pool.query(
+      `SELECT t.* FROM teams t
+       JOIN games g ON g.id = t.game_id
+       JOIN events e ON e.id = g.event_id
+       WHERE t.id = $1 AND e.organizer_id = $2`,
+      [team_id, req.user.id]
+    );
+    if (team.rows.length === 0) {
+      return res.status(404).json({ error: "Team not found" });
+    }
+    if (!team.rows[0].discord_webhook_url) {
+      return res.status(400).json({ error: "Team has no Discord webhook configured" });
+    }
+    const result = await sendDiscordWebhook(team.rows[0].discord_webhook_url, message, image_url);
+    res.json({ success: result.success, discord_result: result });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to post to Discord" });
   }
 });
 

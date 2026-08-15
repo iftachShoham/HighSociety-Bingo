@@ -34,6 +34,21 @@ export const api = {
     }),
   me: () => request("/auth/me"),
 
+  // Upload
+  uploadImage: async (file) => {
+    const formData = new FormData();
+    formData.append("image", file);
+    const token = localStorage.getItem("token");
+    const res = await fetch(`${API_BASE}/upload`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Upload failed");
+    return data;
+  },
+
   // Events
   listEvents: () => request("/events"),
   createEvent: (name, description) =>
@@ -72,6 +87,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ game_id, team_name, password }),
     }),
+  teamLoginByCode: (join_code, password) =>
+    request("/teams/login-by-code", {
+      method: "POST",
+      body: JSON.stringify({ join_code, password }),
+    }),
+  getTeamByCode: (code) => request(`/teams/code/${code}`),
 
   // Tiles
   listTiles: (gameId) => request(`/tiles/game/${gameId}`),
@@ -99,6 +120,11 @@ export const api = {
     request(`/board/${gameId}/move-team`, {
       method: "POST",
       body: JSON.stringify({ team_id, position }),
+    }),
+  postToDiscord: (gameId, team_id, message, image_url) =>
+    request(`/board/${gameId}/post-discord`, {
+      method: "POST",
+      body: JSON.stringify({ team_id, message, image_url }),
     }),
   resetGame: (gameId) =>
     request(`/board/${gameId}/reset`, { method: "POST" }),

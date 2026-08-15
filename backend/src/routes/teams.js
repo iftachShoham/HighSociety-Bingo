@@ -10,7 +10,10 @@ const TEAM_COLORS = [
   "#2ecc71", "#e67e22", "#1abc9c", "#ff6b9d",
 ];
 
-// Helper: verify organizer owns the game
+function genTeamCode() {
+  return Math.random().toString(36).slice(2, 10).toUpperCase();
+}
+
 async function verifyGameOwner(gameId, userId) {
   const result = await pool.query(
     `SELECT g.id FROM games g
@@ -21,7 +24,7 @@ async function verifyGameOwner(gameId, userId) {
   return result.rows.length > 0;
 }
 
-// List teams for a game
+// List teams for a game (admin — includes all fields)
 router.get("/game/:gameId", authMiddleware, async (req, res) => {
   try {
     if (!(await verifyGameOwner(req.params.gameId, req.user.id))) {
@@ -53,14 +56,38 @@ router.post("/", authMiddleware, async (req, res) => {
     );
     const teamColor = color || TEAM_COLORS[parseInt(count.rows[0].cnt) % TEAM_COLORS.length];
     const hash = password ? await bcrypt.hash(password, 10) : null;
+    const joinCode = genTeamCode();
     const result = await pool.query(
-      `INSERT INTO teams (game_id, name, color, discord_channel_id, discord_webhook_url, password_hash)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, game_id, name, color, discord_channel_id, position`,
-      [game_id, name, teamColor, discord_channel_id || null, discord_webhook_url || null, hash]
+      `INSERT INTO teams (game_id, name, color, discord_channel_id, discord_webhook_url, password_hash, join_code)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, game_id, name, color, discord_channel_id, discord_webhook_url, join_code, position`,
+      [game_id, name, teamColor, discord_channel_id || null, discord_webhook_url || null, hash, joinCode]
     );
     res.json({ team: result.rows[0] });
   } catch (err) {
     res.status(500).json({ error: "Failed to create team" });
+  }
+});
+
+// Public: look up team by join code (for per-team links)
+router.get("/code/:code", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT t.id, t.game_id, t.name, t.color, t.join_code,
+        g.name AS game_name, g.status AS game_status, g.join_code AS game_join_code,
+        g.game_type, e.name AS event_name
+       FROM teams t
+       JOIN games g ON g.id = t.game_id
+       JOIN events e ON e.id = g.event_id
+       WHERE t.join_code = $1`,
+      [req.params.code.toUpperCase()]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Invalid team code" });
+    }
+    res.json({ team: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to look up team" });
   }
 });
 
@@ -77,6 +104,40 @@ router.post("/login", async (req, res) => {
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Team not found" });
+    }
+    const team = result.rows[0];
+    if (team.password_hash) {
+      if (!password) return res.status(401).json({ error: "Password required" });
+      const valid = await bcrypt.compare(password, team.password_hash);
+      if (!valid) return res.status(401).json({ error: "Incorrect password" });
+    }
+    res.json({
+      team: {
+        id: team.id,
+        game_id: team.game_id,
+        name: team.name,
+        color: team.color,
+        position: team.position,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Login failed" });
+  }
+});
+
+// Team login by join code (public — direct team access)
+router.post("/login-by-code", async (req, res) => {
+  const { join_code, password } = req.body;
+  if (!join_code) {
+    return res.status(400).json({ error: "Join code required" });
+  }
+  try {
+    const result = await pool.query(
+      "SELECT * FROM teams WHERE join_code = $1",
+      [join_code.toUpperCase()]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Invalid team code" });
     }
     const team = result.rows[0];
     if (team.password_hash) {
@@ -123,7 +184,7 @@ router.put("/:id", authMiddleware, async (req, res) => {
         discord_webhook_url = COALESCE($4, discord_webhook_url),
         position = COALESCE($5, position),
         password_hash = $6
-       WHERE id = $7 RETURNING id, game_id, name, color, discord_channel_id, position`,
+       WHERE id = $7 RETURNING id, game_id, name, color, discord_channel_id, discord_webhook_url, join_code, position`,
       [name, color, discord_channel_id, discord_webhook_url, position, hash, req.params.id]
     );
     res.json({ team: result.rows[0] });

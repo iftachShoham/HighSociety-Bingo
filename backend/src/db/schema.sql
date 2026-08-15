@@ -80,3 +80,11 @@ CREATE TABLE IF NOT EXISTS activity_log (
   details     TEXT,
   created_at  TIMESTAMP DEFAULT NOW()
 );
+
+-- ============================================================
+-- Extensions for full admin control
+-- ============================================================
+ALTER TABLE tiles ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE tiles ADD COLUMN IF NOT EXISTS is_rat_tile BOOLEAN DEFAULT FALSE;
+ALTER TABLE tiles ADD COLUMN IF NOT EXISTS allow_early_submit BOOLEAN DEFAULT FALSE;
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS join_code VARCHAR(20);

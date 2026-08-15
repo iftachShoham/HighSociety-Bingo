@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../api/client.js";
+import GameSettings from "../components/GameSettings.jsx";
+import TileEditor from "../components/TileEditor.jsx";
+import TeamManager from "../components/TeamManager.jsx";
 
 export default function GameSetup() {
   const { id } = useParams();
@@ -10,11 +13,7 @@ export default function GameSetup() {
   const [tiles, setTiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState("tiles");
-
-  // Team form
-  const [teamName, setTeamName] = useState("");
-  const [teamPassword, setTeamPassword] = useState("");
+  const [tab, setTab] = useState("settings");
 
   async function load() {
     try {
@@ -35,51 +34,39 @@ export default function GameSetup() {
 
   useEffect(() => { load(); }, [id]);
 
-  async function addTeam(e) {
-    e.preventDefault();
+  const config = game ? (typeof game.config === "string" ? JSON.parse(game.config) : game.config || {}) : {};
+  const boardSize = config.boardSize || 5;
+
+  async function saveSettings(updates) {
     try {
-      await api.createTeam({
-        game_id: parseInt(id),
-        name: teamName,
-        password: teamPassword || undefined,
-      });
-      setTeamName("");
-      setTeamPassword("");
-      load();
+      const data = await api.updateGame(id, updates);
+      setGame(data.game);
     } catch (err) {
       setError(err.message);
     }
+  }
+
+  async function saveTiles(updatedTiles) {
+    const data = await api.bulkUpdateTiles(id, updatedTiles);
+    setTiles(data.tiles);
+  }
+
+  async function createTeam(teamData) {
+    await api.createTeam({ game_id: parseInt(id), ...teamData });
+    const data = await api.listTeams(id);
+    setTeams(data.teams || []);
+  }
+
+  async function updateTeam(teamId, updates) {
+    await api.updateTeam(teamId, updates);
+    const data = await api.listTeams(id);
+    setTeams(data.teams || []);
   }
 
   async function deleteTeam(teamId) {
     await api.deleteTeam(teamId);
-    load();
-  }
-
-  async function saveTiles() {
-    try {
-      const data = await api.bulkUpdateTiles(id, tiles);
-      setTiles(data.tiles);
-      setError("");
-      alert("Tiles saved!");
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  function addTile() {
-    const nextPos = tiles.length > 0 ? Math.max(...tiles.map((t) => t.position)) + 1 : 1;
-    setTiles([...tiles, { position: nextPos, task_description: "", required_submissions: 1, metadata: {} }]);
-  }
-
-  function updateTile(idx, field, value) {
-    const updated = [...tiles];
-    updated[idx] = { ...updated[idx], [field]: value };
-    setTiles(updated);
-  }
-
-  function removeTile(idx) {
-    setTiles(tiles.filter((_, i) => i !== idx));
+    const data = await api.listTeams(id);
+    setTeams(data.teams || []);
   }
 
   async function startGame() {
@@ -91,7 +78,7 @@ export default function GameSetup() {
       alert("Add at least one team before starting the game.");
       return;
     }
-    await saveTiles();
+    await saveTiles(tiles);
     await api.updateGame(id, { status: "active" });
     navigate(`/games/${id}/board`);
   }
@@ -108,134 +95,53 @@ export default function GameSetup() {
         <span className={`badge badge-${game.status}`}>{game.status}</span>
       </div>
       <p style={{ color: "var(--text-dim)", marginBottom: 8 }}>
-        Type: {game.game_type} · Join Code: <span style={{ fontFamily: "monospace", color: "var(--gold)" }}>{game.join_code}</span>
+        Type: {game.game_type} · Game Code: <span style={{ fontFamily: "monospace", color: "var(--gold)" }}>{game.join_code}</span>
       </p>
       <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: 24 }}>
         Players join at <a href={`/play/${game.join_code}`} target="_blank">/play/{game.join_code}</a>
       </p>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 24, borderBottom: "1px solid var(--border)" }}>
-        <button
-          className="btn-ghost"
-          style={{ borderBottom: tab === "tiles" ? "2px solid var(--gold)" : "2px solid transparent", borderRadius: 0, color: tab === "tiles" ? "var(--gold)" : "var(--text-dim)" }}
-          onClick={() => setTab("tiles")}
-        >
-          🗺️ Tiles
-        </button>
-        <button
-          className="btn-ghost"
-          style={{ borderBottom: tab === "teams" ? "2px solid var(--gold)" : "2px solid transparent", borderRadius: 0, color: tab === "teams" ? "var(--gold)" : "var(--text-dim)" }}
-          onClick={() => setTab("teams")}
-        >
-          🏆 Teams
-        </button>
+      <div style={{ display: "flex", gap: 4, marginBottom: 24, borderBottom: "1px solid var(--border)" }}>
+        {[
+          { key: "settings", label: "⚙ Settings" },
+          { key: "tiles", label: "🗺️ Tiles" },
+          { key: "teams", label: "🏆 Teams" },
+        ].map((t) => (
+          <button
+            key={t.key}
+            className="btn-ghost"
+            style={{
+              borderBottom: tab === t.key ? "2px solid var(--gold)" : "2px solid transparent",
+              borderRadius: 0,
+              color: tab === t.key ? "var(--gold)" : "var(--text-dim)",
+            }}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {error && <p className="error-msg" style={{ marginBottom: 16 }}>{error}</p>}
 
+      {tab === "settings" && <GameSettings game={game} onSave={saveSettings} />}
+
       {tab === "tiles" && (
-        <>
-          <div className="card">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div className="card-title" style={{ marginBottom: 0 }}>Board Tiles</div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn-secondary" onClick={addTile}>+ Add Tile</button>
-                <button className="btn-primary" onClick={saveTiles}>Save Tiles</button>
-              </div>
-            </div>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: 16 }}>
-              Each tile has a task (e.g. an OSRS drop). Teams submit proof to complete tiles. First to clear the board wins.
-            </p>
-            {tiles.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-state-icon">🗺️</div>
-                <p>No tiles yet. Add tiles to build your board.</p>
-              </div>
-            ) : (
-              tiles.map((tile, idx) => (
-                <div key={idx} style={{ display: "flex", gap: 12, marginBottom: 12, alignItems: "flex-start" }}>
-                  <div style={{ width: 50, flexShrink: 0 }}>
-                    <label>Pos</label>
-                    <input
-                      type="number"
-                      value={tile.position}
-                      onChange={(e) => updateTile(idx, "position", parseInt(e.target.value))}
-                      style={{ textAlign: "center" }}
-                    />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label>Task Description</label>
-                    <input
-                      type="text"
-                      value={tile.task_description || ""}
-                      onChange={(e) => updateTile(idx, "task_description", e.target.value)}
-                      placeholder="e.g. Obtain an Abyssal Dagger"
-                    />
-                  </div>
-                  <div style={{ width: 90, flexShrink: 0 }}>
-                    <label>Required</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={tile.required_submissions}
-                      onChange={(e) => updateTile(idx, "required_submissions", parseInt(e.target.value))}
-                      style={{ textAlign: "center" }}
-                    />
-                  </div>
-                  <div style={{ width: 40, flexShrink: 0, paddingTop: 22 }}>
-                    <button className="btn-danger" style={{ padding: "10px 12px" }} onClick={() => removeTile(idx)}>✕</button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </>
+        <TileEditor
+          tiles={tiles}
+          boardSize={boardSize}
+          onChange={setTiles}
+          onSave={saveTiles}
+        />
       )}
 
       {tab === "teams" && (
-        <>
-          <div className="card">
-            <div className="card-title">Add Team</div>
-            <form onSubmit={addTeam}>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Team Name</label>
-                  <input type="text" value={teamName} onChange={(e) => setTeamName(e.target.value)} placeholder="e.g. Purple Team" required />
-                </div>
-                <div className="form-group">
-                  <label>Password (optional)</label>
-                  <input type="text" value={teamPassword} onChange={(e) => setTeamPassword(e.target.value)} placeholder="Protect team access" />
-                </div>
-              </div>
-              <button type="submit" className="btn-primary">Add Team</button>
-            </form>
-          </div>
-
-          {teams.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-state-icon">🏆</div>
-              <p>No teams yet. Add teams to participate in this game.</p>
-            </div>
-          ) : (
-            teams.map((t) => (
-              <div key={t.id} className="list-item">
-                <div className="list-item-info">
-                  <div className="list-item-name" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span className="team-color-dot" style={{ width: 16, height: 16, background: t.color }} />
-                    {t.name}
-                  </div>
-                  <div className="list-item-meta">
-                    {t.password_hash ? "🔒 Password protected" : "No password"}
-                    {t.discord_channel_id ? " · Discord linked" : ""}
-                  </div>
-                </div>
-                <div className="list-item-actions">
-                  <button className="btn-danger" onClick={() => deleteTeam(t.id)}>Delete</button>
-                </div>
-              </div>
-            ))
-          )}
-        </>
+        <TeamManager
+          teams={teams}
+          onCreate={createTeam}
+          onUpdate={updateTeam}
+          onDelete={deleteTeam}
+        />
       )}
 
       {game.status === "setup" && (

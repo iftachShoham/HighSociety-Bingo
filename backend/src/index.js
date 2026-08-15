@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
-import { readFileSync } from "fs";
+import multer from "multer";
+import { readFileSync, mkdirSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { pool } from "./db/pool.js";
@@ -17,8 +18,30 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// Upload setup
+const uploadDir = join(__dirname, "..", "uploads");
+mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const ext = (file.originalname.split(".").pop() || "png").toLowerCase();
+    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`);
+  },
+});
+const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
+
 app.use(cors());
 app.use(express.json());
+
+// Serve uploaded files
+app.use("/api/uploads", express.static(uploadDir));
+
+// Upload endpoint
+app.post("/api/upload", upload.single("image"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+  res.json({ url: `/api/uploads/${req.file.filename}` });
+});
 
 // Routes
 app.use("/api/auth", authRoutes);

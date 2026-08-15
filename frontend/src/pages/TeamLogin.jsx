@@ -6,7 +6,8 @@ export default function TeamLogin() {
   const { code } = useParams();
   const navigate = useNavigate();
   const [game, setGame] = useState(null);
-  const [teams, setTeams] = useState([]);
+  const [teamByCode, setTeamByCode] = useState(null);
+  const [boardTeams, setBoardTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedTeam, setSelectedTeam] = useState("");
@@ -14,25 +15,34 @@ export default function TeamLogin() {
   const [loginError, setLoginError] = useState("");
 
   useEffect(() => {
-    api
-      .getGameByCode(code)
-      .then((data) => {
-        setGame(data.game);
-        // Fetch public tiles for display
-        return api.listPublicTiles(data.game.id);
-      })
-      .then((data) => setTeams(data.tiles || []))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [code]);
+    (async () => {
+      // First check if this is a team join code
+      try {
+        const teamData = await api.getTeamByCode(code);
+        setTeamByCode(teamData.team);
+        // Also get the game info
+        const gameData = await api.getGameByCode(teamData.team.game_join_code);
+        setGame(gameData.game);
+        const boardData = await api.getBoard(teamData.team.game_id);
+        setBoardTeams(boardData.teams);
+        setLoading(false);
+        return;
+      } catch {
+        // Not a team code, try as game code
+      }
 
-  // We need team list — use board endpoint (public)
-  const [boardTeams, setBoardTeams] = useState([]);
-  useEffect(() => {
-    if (game) {
-      api.getBoard(game.id).then((data) => setBoardTeams(data.teams)).catch(() => {});
-    }
-  }, [game]);
+      try {
+        const gameData = await api.getGameByCode(code);
+        setGame(gameData.game);
+        const boardData = await api.getBoard(gameData.game.id);
+        setBoardTeams(boardData.teams);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [code]);
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -45,9 +55,55 @@ export default function TeamLogin() {
     }
   }
 
+  async function handleTeamCodeLogin(e) {
+    e.preventDefault();
+    setLoginError("");
+    try {
+      const data = await api.teamLoginByCode(teamByCode.join_code, password);
+      navigate(`/play/${teamByCode.game_join_code}/team/${data.team.id}`);
+    } catch (err) {
+      setLoginError(err.message);
+    }
+  }
+
   if (loading) return <div className="page"><p style={{ color: "var(--text-muted)" }}>Loading…</p></div>;
   if (error) return <div className="page"><p className="error-msg">{error}</p></div>;
 
+  // Direct team access via team join code
+  if (teamByCode) {
+    return (
+      <div className="page" style={{ maxWidth: 440, paddingTop: 60 }}>
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <div style={{ fontSize: "2.5rem", marginBottom: 8 }}>🐀</div>
+          <h1 className="page-title" style={{ marginBottom: 4 }}>{teamByCode.game_name}</h1>
+          <p style={{ color: "var(--text-dim)" }}>{teamByCode.event_name}</p>
+          <div style={{ marginTop: 12 }}>
+            <span className="team-color-dot" style={{ width: 20, height: 20, background: teamByCode.color, display: "inline-block" }} />
+            <span style={{ marginLeft: 8, fontWeight: 600 }}>{teamByCode.name}</span>
+          </div>
+          {teamByCode.game_status !== "active" && (
+            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: 8 }}>
+              This game hasn't started yet.
+            </p>
+          )}
+        </div>
+
+        <div className="card">
+          <div className="card-title">Enter Your Team</div>
+          <form onSubmit={handleTeamCodeLogin}>
+            <div className="form-group">
+              <label>Password (if required)</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Team password" />
+            </div>
+            {loginError && <p className="error-msg">{loginError}</p>}
+            <button type="submit" className="btn-primary" style={{ width: "100%" }}>Enter Game</button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // Game code — show team selection
   return (
     <div className="page" style={{ maxWidth: 440, paddingTop: 60 }}>
       <div style={{ textAlign: "center", marginBottom: 32 }}>
