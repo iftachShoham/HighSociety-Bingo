@@ -12,6 +12,7 @@ export default function BingoBoard({ tiles, teams, completedByTile, gridCols, on
         const completedTeams = completedByTile[tile.id] || [];
         const isCompleted = completedTeams.length > 0;
         const isRat = showRats && tile.is_rat_tile;
+        const isPlaceholder = !!tile.isPlaceholder;
         const overlay = battleshipOverlays?.[tile.position];
         const hasShip = overlay?.shipColor;
         const isShipSunk = overlay?.isShipSunk;
@@ -21,8 +22,8 @@ export default function BingoBoard({ tiles, teams, completedByTile, gridCols, on
         return (
           <div
             key={tile.id}
-            className={`bingo-tile ${isCompleted ? "completed" : ""} ${isRat ? "rat-tile" : ""} ${hasShip ? "has-ship" : ""} ${isShipSunk ? "ship-sunk" : ""} ${isHit ? "ship-hit" : ""} ${attackHit ? "attack-hit" : ""} ${attackMiss ? "attack-miss" : ""}`}
-            onClick={() => onTileClick(tile)}
+            className={`bingo-tile ${isPlaceholder ? "placeholder" : ""} ${isCompleted ? "completed" : ""} ${isRat ? "rat-tile" : ""} ${hasShip ? "has-ship" : ""} ${isShipSunk ? "ship-sunk" : ""} ${isHit ? "ship-hit" : ""} ${attackHit ? "attack-hit" : ""} ${attackMiss ? "attack-miss" : ""}`}
+            onClick={() => { if (!isPlaceholder) onTileClick(tile); }}
             style={hasShip ? { borderColor: overlay.shipColor } : {}}
           >
             {tile.image_url && (

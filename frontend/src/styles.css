@@ -266,6 +266,17 @@ label {
   border-color: var(--gold);
   transform: scale(1.03);
 }
+.bingo-tile.placeholder {
+  background: var(--bg);
+  border-style: dashed;
+  border-color: var(--border);
+  opacity: 0.7;
+  cursor: default;
+}
+.bingo-tile.placeholder:hover {
+  border-color: var(--border);
+  transform: none;
+}
 .bingo-tile.completed {
   border-color: var(--green);
   background: rgba(46,204,113,0.08);

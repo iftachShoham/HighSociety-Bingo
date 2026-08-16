@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../api/client.js";
 import BingoBoard from "../components/BingoBoard.jsx";
 import TileModal from "../components/TileModal.jsx";
+import { fillBoardTiles } from "../utils/board.js";
 
 export default function GameBoard() {
   const { id } = useParams();
@@ -105,10 +106,11 @@ export default function GameBoard() {
   if (error) return <div className="page"><p className="error-msg">{error}</p></div>;
   if (!board) return null;
 
-  const { game, tiles, teams, completedByTile } = board;
+  const { game, teams, completedByTile } = board;
   const config = typeof game.config === "string" ? JSON.parse(game.config) : game.config || {};
   const boardSize = config.boardSize || 5;
-  const gridCols = Math.min(tiles.length, boardSize);
+  const tiles = fillBoardTiles(board.tiles, boardSize);
+  const gridCols = boardSize;
   const isBattleship = game.game_type === "battleship";
 
   return (

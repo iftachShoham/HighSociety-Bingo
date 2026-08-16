@@ -4,6 +4,7 @@ import { api } from "../api/client.js";
 import BingoBoard from "../components/BingoBoard.jsx";
 import ImageUpload from "../components/ImageUpload.jsx";
 import ShipPlacement from "../components/ShipPlacement.jsx";
+import { fillBoardTiles } from "../utils/board.js";
 
 function buildTeamOverlays(shipState, teamId, teamColor) {
   if (!shipState?.state?.[teamId]) return null;
@@ -124,10 +125,11 @@ export default function TeamView() {
   if (error) return <div className="page"><p className="error-msg">{error}</p></div>;
   if (!board || !team) return null;
 
-  const { tiles, teams, completedByTile, game } = board;
+  const { teams, completedByTile, game } = board;
   const config = typeof game.config === "string" ? JSON.parse(game.config) : game.config || {};
   const boardSize = config.boardSize || 5;
-  const gridCols = Math.min(tiles.length, boardSize);
+  const tiles = fillBoardTiles(board.tiles, boardSize);
+  const gridCols = boardSize;
   const isBattleship = game.game_type === "battleship";
   const myState = shipState?.state?.[team.id];
   const hasShipsPlaced = teamShips.length > 0;
