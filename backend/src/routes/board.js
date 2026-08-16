@@ -63,11 +63,20 @@ router.get("/:gameId", async (req, res) => {
       }
     }
 
+    // Battleship state (if applicable)
+    let battleship = null;
+    if (game.rows[0].game_type === "battleship") {
+      const placements = await pool.query("SELECT * FROM ship_placements WHERE game_id = $1", [req.params.gameId]);
+      const attacks = await pool.query("SELECT * FROM ship_attacks WHERE game_id = $1 ORDER BY created_at", [req.params.gameId]);
+      battleship = { placements: placements.rows, attacks: attacks.rows };
+    }
+
     res.json({
       game: game.rows[0],
       tiles: tiles.rows,
       teams: teams.rows,
       completedByTile,
+      battleship,
     });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch board state" });

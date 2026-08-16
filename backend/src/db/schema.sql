@@ -88,3 +88,27 @@ ALTER TABLE tiles ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE tiles ADD COLUMN IF NOT EXISTS is_rat_tile BOOLEAN DEFAULT FALSE;
 ALTER TABLE tiles ADD COLUMN IF NOT EXISTS allow_early_submit BOOLEAN DEFAULT FALSE;
 ALTER TABLE teams ADD COLUMN IF NOT EXISTS join_code VARCHAR(20);
+
+-- ============================================================
+-- Battleship Bingo: ship placements and attacks
+-- ============================================================
+CREATE TABLE IF NOT EXISTS ship_placements (
+  id          SERIAL PRIMARY KEY,
+  game_id     INTEGER REFERENCES games(id) ON DELETE CASCADE,
+  team_id     INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+  ship_name   VARCHAR(100) NOT NULL,
+  ship_size   INTEGER NOT NULL,
+  positions   INTEGER[] NOT NULL,
+  created_at  TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ship_attacks (
+  id                SERIAL PRIMARY KEY,
+  game_id           INTEGER REFERENCES games(id) ON DELETE CASCADE,
+  attacker_team_id  INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+  target_team_id    INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+  position          INTEGER NOT NULL,
+  hit               BOOLEAN NOT NULL,
+  ship_placement_id INTEGER REFERENCES ship_placements(id) ON DELETE SET NULL,
+  created_at        TIMESTAMP DEFAULT NOW()
+);

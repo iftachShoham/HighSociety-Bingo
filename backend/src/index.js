@@ -12,6 +12,7 @@ import teamRoutes from "./routes/teams.js";
 import tileRoutes from "./routes/tiles.js";
 import submissionRoutes from "./routes/submissions.js";
 import boardRoutes from "./routes/board.js";
+import shipRoutes from "./routes/ships.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -51,6 +52,7 @@ app.use("/api/teams", teamRoutes);
 app.use("/api/tiles", tileRoutes);
 app.use("/api/submissions", submissionRoutes);
 app.use("/api/board", boardRoutes);
+app.use("/api/ships", shipRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {

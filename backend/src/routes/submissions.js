@@ -12,7 +12,7 @@ router.post("/", async (req, res) => {
   }
   try {
     const team = await pool.query(
-      `SELECT t.*, g.id AS game_id, g.status AS game_status, g.config AS game_config
+      `SELECT t.*, g.id AS game_id, g.status AS game_status, g.config AS game_config, g.game_type
        FROM teams t JOIN games g ON g.id = t.game_id
        WHERE t.id = $1`,
       [team_id]
@@ -65,7 +65,7 @@ router.post("/", async (req, res) => {
 
     await pool.query(
       `INSERT INTO activity_log (game_id, team_id, event_type, from_tile, to_tile, details)
-       VALUES ($1, $2, $3, $3, $4)`,
+       VALUES ($1, $2, $3, $4, $4, $5)`,
       [
         team.rows[0].game_id,
         team_id,
@@ -100,6 +100,17 @@ router.post("/", async (req, res) => {
       }
     }
 
+    // Battleship attack: if game is battleship type and tile completed
+    let battleResult = null;
+    if (fullyCompleted && team.rows[0].game_type === "battleship") {
+      battleResult = await triggerBattleshipAttack(
+        team.rows[0].game_id,
+        team_id,
+        team.rows[0].name,
+        tile.rows[0].position
+      );
+    }
+
     res.json({
       success: true,
       submission: result.rows[0],
@@ -107,9 +118,11 @@ router.post("/", async (req, res) => {
       required,
       fully_completed: fullyCompleted,
       rat_result: ratResult,
+      battle_result: battleResult,
     });
   } catch (err) {
-    res.status(500).json({ error: "Failed to submit proof" });
+    console.error("Submission error:", err.message, err.stack);
+    res.status(500).json({ error: "Failed to submit proof: " + err.message });
   }
 });
 
@@ -211,6 +224,96 @@ async function triggerRat(gameId, landerTeamId, landerName, ratTile, selfProbabi
     victim_name: victim.name,
     reverted_tile: revertedTile ? revertedTile.position : null,
   };
+}
+
+// Battleship attack logic
+async function triggerBattleshipAttack(gameId, attackerTeamId, attackerName, position) {
+  const enemies = await pool.query(
+    "SELECT id, name, discord_webhook_url FROM teams WHERE game_id = $1 AND id != $2",
+    [gameId, attackerTeamId]
+  );
+
+  const results = [];
+
+  for (const enemy of enemies.rows) {
+    const shipAtPos = await pool.query(
+      "SELECT * FROM ship_placements WHERE team_id = $1 AND $2 = ANY(positions)",
+      [enemy.id, position]
+    );
+
+    const hit = shipAtPos.rows.length > 0;
+    const shipId = hit ? shipAtPos.rows[0].id : null;
+
+    await pool.query(
+      `INSERT INTO ship_attacks (game_id, attacker_team_id, target_team_id, position, hit, ship_placement_id)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [gameId, attackerTeamId, enemy.id, position, hit, shipId]
+    );
+
+    let sunk = false;
+    let eliminated = false;
+    let shipName = null;
+
+    if (hit) {
+      const ship = shipAtPos.rows[0];
+      shipName = ship.ship_name;
+      const hitsOnShip = await pool.query(
+        "SELECT COUNT(DISTINCT position) AS cnt FROM ship_attacks WHERE ship_placement_id = $1 AND hit = true",
+        [ship.id]
+      );
+      sunk = parseInt(hitsOnShip.rows[0].cnt) >= ship.ship_size;
+
+      if (sunk) {
+        const allShips = await pool.query("SELECT id, ship_size FROM ship_placements WHERE team_id = $1", [enemy.id]);
+        let allSunk = true;
+        for (const s of allShips.rows) {
+          const hits = await pool.query(
+            "SELECT COUNT(DISTINCT position) AS cnt FROM ship_attacks WHERE ship_placement_id = $1 AND hit = true",
+            [s.id]
+          );
+          if (parseInt(hits.rows[0].cnt) < s.ship_size) { allSunk = false; break; }
+        }
+        eliminated = allSunk;
+      }
+    }
+
+    results.push({ target_team: enemy.name, hit, sunk, eliminated, ship_name: shipName });
+
+    // Post to victim's Discord
+    if (enemy.discord_webhook_url) {
+      let msg;
+      if (eliminated) {
+        msg = `💥 **${attackerName}** sank your last ship at position ${position}! You are ELIMINATED!`;
+      } else if (sunk) {
+        msg = `🚢💥 **${attackerName}** SANK your **${shipName}** at position ${position}!`;
+      } else if (hit) {
+        msg = `🎯 **${attackerName}** HIT your **${shipName}** at position ${position}!`;
+      } else {
+        msg = `🌊 **${attackerName}** fired at position ${position} — MISS!`;
+      }
+      sendDiscordWebhook(enemy.discord_webhook_url, msg);
+    }
+  }
+
+  // Post to attacker's Discord
+  const attacker = await pool.query("SELECT discord_webhook_url FROM teams WHERE id = $1", [attackerTeamId]);
+  if (attacker.rows[0]?.discord_webhook_url) {
+    const hits = results.filter((r) => r.hit).length;
+    const sinks = results.filter((r) => r.sunk).length;
+    const eliminations = results.filter((r) => r.eliminated);
+    let msg = `🎯 You attacked position ${position}: ${hits} hit${hits !== 1 ? "s" : ""}`;
+    if (sinks > 0) msg += `, ${sinks} ship${sinks !== 1 ? "s" : ""} sunk!`;
+    if (eliminations.length > 0) msg += ` — ${eliminations.map((e) => e.target_team).join(", ")} eliminated!`;
+    sendDiscordWebhook(attacker.rows[0].discord_webhook_url, msg);
+  }
+
+  await pool.query(
+    `INSERT INTO activity_log (game_id, team_id, event_type, to_tile, details)
+     VALUES ($1, $2, 'BATTLESHIP_ATTACK', $3, $4)`,
+    [gameId, attackerTeamId, position, `${attackerName} attacked position ${position}: ${results.map((r) => `${r.target_team}: ${r.hit ? "HIT" : "MISS"}`).join(", ")}`]
+  );
+
+  return { position, attacks: results };
 }
 
 // List submissions for a team

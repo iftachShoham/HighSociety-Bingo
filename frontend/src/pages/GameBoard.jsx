@@ -8,6 +8,7 @@ export default function GameBoard() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [board, setBoard] = useState(null);
+  const [shipState, setShipState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedTile, setSelectedTile] = useState(null);
@@ -23,6 +24,10 @@ export default function GameBoard() {
     try {
       const data = await api.getBoard(id);
       setBoard(data);
+      if (data.game.game_type === "battleship") {
+        const shipData = await api.getShipState(id);
+        setShipState(shipData);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -74,7 +79,7 @@ export default function GameBoard() {
   }
 
   async function resetGame() {
-    if (!confirm("Reset the entire game? All submissions and positions will be cleared.")) return;
+    if (!confirm("Reset the entire game? All submissions, positions, and attacks will be cleared.")) return;
     await api.resetGame(id);
     load();
   }
@@ -104,7 +109,7 @@ export default function GameBoard() {
   const config = typeof game.config === "string" ? JSON.parse(game.config) : game.config || {};
   const boardSize = config.boardSize || 5;
   const gridCols = Math.min(tiles.length, boardSize);
-  const ratsEnabled = config.rats?.enabled;
+  const isBattleship = game.game_type === "battleship";
 
   return (
     <div className="page">
@@ -126,8 +131,18 @@ export default function GameBoard() {
         {game.event_name} · <span className={`badge badge-${game.status}`}>{game.status}</span>
         {" · Code: "}
         <span style={{ fontFamily: "monospace", color: "var(--gold)" }}>{game.join_code}</span>
-        {ratsEnabled && <span style={{ color: "var(--red)" }}> · 🐀 Rats enabled</span>}
+        {isBattleship && " · 🚢 Battleship Bingo"}
       </p>
+
+      {/* Winner banner */}
+      {shipState?.winner && (
+        <div className="card" style={{ textAlign: "center", borderColor: "var(--gold)", marginBottom: 16 }}>
+          <div style={{ fontSize: "1.5rem" }}>🏆</div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: "1.2rem", color: "var(--gold)" }}>
+            {shipState.winner.team_name} wins!
+          </div>
+        </div>
+      )}
 
       <div className="stat-grid">
         <div className="stat-card">
@@ -142,10 +157,12 @@ export default function GameBoard() {
           <div className="stat-value">{Object.values(completedByTile).flat().length}</div>
           <div className="stat-label">Completions</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-value">{tiles.filter((t) => t.is_rat_tile).length}</div>
-          <div className="stat-label">Rat Tiles</div>
-        </div>
+        {isBattleship && (
+          <div className="stat-card">
+            <div className="stat-value">{shipState ? Object.values(shipState.state).filter((s) => !s.eliminated && s.ships_placed).length : 0}</div>
+            <div className="stat-label">Active Fleets</div>
+          </div>
+        )}
       </div>
 
       <BingoBoard
@@ -154,7 +171,7 @@ export default function GameBoard() {
         completedByTile={completedByTile}
         gridCols={gridCols}
         onTileClick={openTile}
-        showRats={true}
+        showRats={!isBattleship}
       />
 
       <div className="board-legend">
@@ -162,9 +179,42 @@ export default function GameBoard() {
           <div key={t.id} className="legend-item">
             <span className="team-color-dot" style={{ width: 14, height: 14, background: t.color }} />
             {t.name}
+            {isBattleship && shipState?.state?.[t.id]?.eliminated && " 💀"}
           </div>
         ))}
       </div>
+
+      {/* Battleship fleet status (admin) */}
+      {isBattleship && shipState && (
+        <div className="card" style={{ marginTop: 24 }}>
+          <div className="card-title">🚢 Fleet Status</div>
+          <div className="battleship-status">
+            {Object.values(shipState.state).map((s) => (
+              <div key={s.team_id} className={`bs-team-card ${s.eliminated ? "eliminated" : ""} ${shipState.winner?.team_id === s.team_id ? "winner" : ""}`}>
+                <div className="bs-team-name">
+                  <span className="team-color-dot" style={{ width: 14, height: 14, background: s.team_color }} />
+                  {s.team_name}
+                  {s.eliminated && <span style={{ color: "var(--red)", fontSize: "0.8rem" }}>💀 ELIMINATED</span>}
+                  {shipState.winner?.team_id === s.team_id && <span style={{ color: "var(--gold)", fontSize: "0.8rem" }}>🏆 WINNER</span>}
+                </div>
+                {!s.ships_placed ? (
+                  <div style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>Ships not placed yet</div>
+                ) : (
+                  s.ships.map((ship, i) => (
+                    <div key={i} className="bs-ship-row">
+                      <span className="bs-ship-icon">{ship.is_sunk ? "💀" : "🚢"}</span>
+                      <span style={{ flex: 1 }}>{ship.ship_name}</span>
+                      <span style={{ color: ship.is_sunk ? "var(--red)" : "var(--text-dim)", fontSize: "0.78rem" }}>
+                        {ship.is_sunk ? "SUNK" : `${ship.hit_positions.length}/${ship.ship_size}`}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Admin team controls */}
       <div className="card" style={{ marginTop: 24 }}>
@@ -176,9 +226,10 @@ export default function GameBoard() {
                 <span className="team-color-dot" style={{ width: 16, height: 16, background: t.color }} />
                 {t.name}
                 {t.join_code && (
-                  <span style={{ fontFamily: "monospace", fontSize: "0.78rem", color: "var(--gold)" }}>
-                    · {t.join_code}
-                  </span>
+                  <span style={{ fontFamily: "monospace", fontSize: "0.78rem", color: "var(--gold)" }}>· {t.join_code}</span>
+                )}
+                {isBattleship && shipState?.state?.[t.id]?.ships_placed && (
+                  <span style={{ fontSize: "0.75rem", color: "var(--green)" }}>🚢 Ships placed</span>
                 )}
               </div>
               <div className="list-item-meta">
@@ -195,7 +246,6 @@ export default function GameBoard() {
           </div>
         ))}
 
-        {/* Discord posting panel */}
         {discordTeam && (
           <div className="card" style={{ background: "var(--bg)", marginTop: 12, marginBottom: 0 }}>
             <div className="card-title" style={{ fontSize: "1rem" }}>Post to Discord</div>
@@ -215,7 +265,6 @@ export default function GameBoard() {
         )}
       </div>
 
-      {/* Activity log modal */}
       {showActivity && (
         <div className="modal-overlay" onClick={() => setShowActivity(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 600 }}>

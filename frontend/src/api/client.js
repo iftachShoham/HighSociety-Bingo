@@ -113,6 +113,13 @@ export const api = {
   deleteSubmission: (id) =>
     request(`/submissions/${id}`, { method: "DELETE" }),
 
+  // Ships (battleship)
+  placeShips: (team_id, ships) =>
+    request("/ships/place", { method: "POST", body: JSON.stringify({ team_id, ships }) }),
+  getTeamShips: (teamId) => request(`/ships/team/${teamId}`),
+  getShipState: (gameId) => request(`/ships/game/${gameId}/state`),
+  clearTeamShips: (teamId) => request(`/ships/team/${teamId}`, { method: "DELETE" }),
+
   // Board
   getBoard: (gameId) => request(`/board/${gameId}`),
   getActivity: (gameId) => request(`/board/${gameId}/activity`),

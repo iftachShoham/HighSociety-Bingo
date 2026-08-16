@@ -1,4 +1,4 @@
-export default function BingoBoard({ tiles, teams, completedByTile, gridCols, onTileClick, showRats = false }) {
+export default function BingoBoard({ tiles, teams, completedByTile, gridCols, onTileClick, showRats = false, battleshipOverlays = null }) {
   const gridStyle = {
     display: "grid",
     gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
@@ -12,11 +12,18 @@ export default function BingoBoard({ tiles, teams, completedByTile, gridCols, on
         const completedTeams = completedByTile[tile.id] || [];
         const isCompleted = completedTeams.length > 0;
         const isRat = showRats && tile.is_rat_tile;
+        const overlay = battleshipOverlays?.[tile.position];
+        const hasShip = overlay?.shipColor;
+        const isShipSunk = overlay?.isShipSunk;
+        const isHit = overlay?.isHit;
+        const attackHit = overlay?.attackHit;
+        const attackMiss = overlay?.attackMiss;
         return (
           <div
             key={tile.id}
-            className={`bingo-tile ${isCompleted ? "completed" : ""} ${isRat ? "rat-tile" : ""}`}
+            className={`bingo-tile ${isCompleted ? "completed" : ""} ${isRat ? "rat-tile" : ""} ${hasShip ? "has-ship" : ""} ${isShipSunk ? "ship-sunk" : ""} ${isHit ? "ship-hit" : ""} ${attackHit ? "attack-hit" : ""} ${attackMiss ? "attack-miss" : ""}`}
             onClick={() => onTileClick(tile)}
+            style={hasShip ? { borderColor: overlay.shipColor } : {}}
           >
             {tile.image_url && (
               <div className="bingo-tile-image">
@@ -28,6 +35,7 @@ export default function BingoBoard({ tiles, teams, completedByTile, gridCols, on
               #{tile.position}
               {isRat && <span className="rat-indicator">🐀</span>}
               {tile.allow_early_submit && <span className="early-indicator">🏆</span>}
+              {hasShip && <span className="ship-indicator" style={{ color: overlay.shipColor }}>🚢</span>}
             </div>
             <div className="bingo-tile-task">{tile.task_description || "—"}</div>
             <div className="bingo-tile-badges">
@@ -42,6 +50,9 @@ export default function BingoBoard({ tiles, teams, completedByTile, gridCols, on
                   />
                 );
               })}
+              {isHit && <span className="battle-marker hit">💥</span>}
+              {attackHit && <span className="battle-marker hit">🎯</span>}
+              {attackMiss && <span className="battle-marker miss">🌊</span>}
             </div>
           </div>
         );

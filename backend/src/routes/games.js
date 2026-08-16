@@ -102,17 +102,18 @@ router.get("/code/:code", async (req, res) => {
 
 // Update game
 router.put("/:id", authMiddleware, async (req, res) => {
-  const { name, status, config } = req.body;
+  const { name, status, config, game_type } = req.body;
   try {
     const result = await pool.query(
       `UPDATE games SET
-        name = COALESCE($1, name),
-        status = COALESCE($2, status),
-        config = COALESCE($3, config)
+        name = COALESCE($1, games.name),
+        status = COALESCE($2, games.status),
+        config = COALESCE($3, games.config),
+        game_type = COALESCE($4, games.game_type)
        FROM events
-       WHERE games.id = $4 AND events.id = games.event_id AND events.organizer_id = $5
+       WHERE games.id = $5 AND events.id = games.event_id AND events.organizer_id = $6
        RETURNING games.*`,
-      [name, status, config ? JSON.stringify(config) : null, req.params.id, req.user.id]
+      [name, status, config ? JSON.stringify(config) : null, game_type, req.params.id, req.user.id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Game not found" });

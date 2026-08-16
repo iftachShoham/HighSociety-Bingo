@@ -11,6 +11,7 @@ export default function GameSetup() {
   const [game, setGame] = useState(null);
   const [teams, setTeams] = useState([]);
   const [tiles, setTiles] = useState([]);
+  const [shipState, setShipState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [tab, setTab] = useState("settings");
@@ -25,6 +26,12 @@ export default function GameSetup() {
       setGame(gameData.game);
       setTeams(teamData.teams || []);
       setTiles(tileData.tiles || []);
+      if (gameData.game.game_type === "battleship") {
+        try {
+          const shipData = await api.getShipState(id);
+          setShipState(shipData);
+        } catch {}
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -36,6 +43,7 @@ export default function GameSetup() {
 
   const config = game ? (typeof game.config === "string" ? JSON.parse(game.config) : game.config || {}) : {};
   const boardSize = config.boardSize || 5;
+  const isBattleship = game?.game_type === "battleship";
 
   async function saveSettings(updates) {
     try {
@@ -71,13 +79,35 @@ export default function GameSetup() {
 
   async function startGame() {
     if (tiles.length === 0) {
-      alert("Add at least one tile before starting the game.");
+      alert("Add at least one tile before starting.");
       return;
     }
     if (teams.length === 0) {
-      alert("Add at least one team before starting the game.");
+      alert("Add at least one team before starting.");
       return;
     }
+
+    if (isBattleship && game.status === "setup") {
+      await saveTiles(tiles);
+      await api.updateGame(id, { status: "placing" });
+      await load();
+      return;
+    }
+
+    if (isBattleship && game.status === "placing") {
+      if (shipState) {
+        const allPlaced = teams.every((t) => shipState.state[t.id]?.ships_placed);
+        if (!allPlaced) {
+          alert("Not all teams have placed their ships yet!");
+          return;
+        }
+      }
+      await api.updateGame(id, { status: "active" });
+      navigate(`/games/${id}/board`);
+      return;
+    }
+
+    // Bingo
     await saveTiles(tiles);
     await api.updateGame(id, { status: "active" });
     navigate(`/games/${id}/board`);
@@ -85,6 +115,12 @@ export default function GameSetup() {
 
   if (loading) return <div className="page"><p style={{ color: "var(--text-muted)" }}>Loading…</p></div>;
   if (!game) return <div className="page"><p className="error-msg">Game not found</p></div>;
+
+  const startButtonLabel = isBattleship
+    ? game.status === "setup" ? "▶ Start Placement Phase"
+    : game.status === "placing" ? "▶ Start Game"
+    : "Go to Board"
+    : "▶ Start Game";
 
   return (
     <div className="page">
@@ -127,27 +163,53 @@ export default function GameSetup() {
       {tab === "settings" && <GameSettings game={game} onSave={saveSettings} />}
 
       {tab === "tiles" && (
-        <TileEditor
-          tiles={tiles}
-          boardSize={boardSize}
-          onChange={setTiles}
-          onSave={saveTiles}
-        />
+        <TileEditor tiles={tiles} boardSize={boardSize} onChange={setTiles} onSave={saveTiles} />
       )}
 
       {tab === "teams" && (
-        <TeamManager
-          teams={teams}
-          onCreate={createTeam}
-          onUpdate={updateTeam}
-          onDelete={deleteTeam}
-        />
+        <>
+          <TeamManager teams={teams} onCreate={createTeam} onUpdate={updateTeam} onDelete={deleteTeam} />
+          {isBattleship && game.status === "placing" && shipState && (
+            <div className="card" style={{ marginTop: 16 }}>
+              <div className="card-title">🚢 Ship Placement Status</div>
+              {teams.map((t) => {
+                const placed = shipState.state[t.id]?.ships_placed;
+                return (
+                  <div key={t.id} className="list-item">
+                    <div className="list-item-info">
+                      <div className="list-item-name" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span className="team-color-dot" style={{ width: 14, height: 14, background: t.color }} />
+                        {t.name}
+                      </div>
+                      <div className="list-item-meta">
+                        {placed ? "✅ Ships placed" : "⏳ Waiting for placement"}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
 
-      {game.status === "setup" && (
+      {(game.status === "setup" || (isBattleship && game.status === "placing")) && (
         <div style={{ marginTop: 24, textAlign: "center" }}>
           <button className="btn-primary" style={{ fontSize: "1.1rem", padding: "14px 40px" }} onClick={startGame}>
-            ▶ Start Game
+            {startButtonLabel}
+          </button>
+          {isBattleship && game.status === "placing" && (
+            <p style={{ color: "var(--text-muted)", fontSize: "0.82rem", marginTop: 8 }}>
+              All teams must place their ships before starting.
+            </p>
+          )}
+        </div>
+      )}
+
+      {game.status === "active" && (
+        <div style={{ marginTop: 24, textAlign: "center" }}>
+          <button className="btn-primary" style={{ fontSize: "1.1rem", padding: "14px 40px" }} onClick={() => navigate(`/games/${id}/board`)}>
+            Go to Board →
           </button>
         </div>
       )}
