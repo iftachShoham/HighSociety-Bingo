@@ -9,6 +9,8 @@ export default function Home({ user, setUser }) {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [generated, setGenerated] = useState(null); // { username, password }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -23,6 +25,21 @@ export default function Home({ user, setUser }) {
       navigate("/dashboard");
     } catch (err) {
       setError(err.message);
+    }
+  }
+
+  async function handleGuestAccess() {
+    setError("");
+    setGenerating(true);
+    try {
+      const data = await api.guest(displayName || undefined);
+      localStorage.setItem("token", data.token);
+      setUser(data.user);
+      setGenerated({ username: data.generated_username, password: data.generated_password });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -107,7 +124,43 @@ export default function Home({ user, setUser }) {
             {mode === "login" ? "Login" : "Create Account"}
           </button>
         </form>
+
+        <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid var(--border)" }}>
+          <p style={{ color: "var(--text-muted)", fontSize: "0.82rem", marginBottom: 12, textAlign: "center" }}>
+            Don't want to make an account? Get instant access with auto-generated credentials.
+          </p>
+          <button
+            className="btn-secondary"
+            style={{ width: "100%" }}
+            onClick={handleGuestAccess}
+            disabled={generating}
+          >
+            {generating ? "Generating…" : "⚡ Get Instant Access"}
+          </button>
+        </div>
       </div>
+
+      {generated && (
+        <div className="card" style={{ borderColor: "var(--gold)" }}>
+          <div className="card-title" style={{ marginBottom: 8 }}>🎉 Access Granted — Save These!</div>
+          <p style={{ color: "var(--text-dim)", fontSize: "0.85rem", marginBottom: 16 }}>
+            You're logged in. Write these down to log back in later:
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+            <div style={{ background: "var(--bg)", padding: "12px 14px", borderRadius: "var(--radius)", border: "1px solid var(--border)" }}>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 4 }}>Username</div>
+              <div style={{ fontFamily: "monospace", fontSize: "1.05rem", color: "var(--gold)" }}>{generated.username}</div>
+            </div>
+            <div style={{ background: "var(--bg)", padding: "12px 14px", borderRadius: "var(--radius)", border: "1px solid var(--border)" }}>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 4 }}>Password</div>
+              <div style={{ fontFamily: "monospace", fontSize: "1.05rem", color: "var(--gold)" }}>{generated.password}</div>
+            </div>
+          </div>
+          <button className="btn-primary" style={{ width: "100%" }} onClick={() => navigate("/dashboard")}>
+            Go to Dashboard →
+          </button>
+        </div>
+      )}
 
       <div style={{ textAlign: "center", marginTop: 20 }}>
         <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>

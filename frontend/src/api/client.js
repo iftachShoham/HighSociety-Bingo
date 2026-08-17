@@ -32,6 +32,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ username, password }),
     }),
+  guest: (display_name) =>
+    request("/auth/guest", {
+      method: "POST",
+      body: JSON.stringify({ display_name }),
+    }),
   me: () => request("/auth/me"),
 
   // Upload
